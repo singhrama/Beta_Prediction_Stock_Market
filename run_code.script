@@ -1,0 +1,18 @@
+#!/bin/bash
+
+#SBATCH -J Stocks_Data_Download
+#SBATCH -p general
+#SBATCH -o output_SDD_%j.txt
+#SBATCH -e error_SDD_%j.err
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=singrama@iu.edu
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --time=02:00:00
+#SBATCH --mem=16G
+
+#Load any modules that your program needs
+module load python
+
+#Run your program
+srun /N/u/singrama/Carbonate/Documents/Beta_Conditional/PY_Files/Data_SEC_Extract.py

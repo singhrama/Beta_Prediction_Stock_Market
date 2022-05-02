@@ -39,13 +39,13 @@ def start_cusip():
 
 	ologger = setup_logging()
 	o_my_cusips = get_cusip()
+	
+	user = 'cdavis40'
+	password = 'TH!7rRS8BNf9z@P'
 
+	conn = wrds.Connection(wrds_username = user)
 	#for tick in tickers.ticker:
 	for cusip in o_my_cusips:
-		user = 'cdavis40'
-		password = 'TH!7rRS8BNf9z@P'
-
-		conn = wrds.Connection(wrds_username = user)
 
 		#print(tick)
 		os.chdir(inti_file)
@@ -53,6 +53,8 @@ def start_cusip():
 			try:
 				ologger.info(cusip + '_Started_For_' + year)
 				cond_bea(conn, inti_file, cusip, year.strip(), ologger)
+			except:
+				ologger.critical(cusip + '_For_' + year + '_FAILED')
 		
 		path = inti_file + '/' + cusip
 		
@@ -68,8 +70,7 @@ def start_cusip():
 			if os.path.isdir(path) ==True: shutil.rmtree(path, ignore_errors=True)
 			ologger.info(cusip + '_File_Done_For_' + year)
 			
-			except:
-				ologger.critical(cusip + '_For_' + year + '_FAILED')
+			
 				
 				
 def setup_logging():
@@ -81,7 +82,8 @@ def setup_logging():
     logger.setLevel(logging.INFO)
 
     # define file handler and set formatter
-    file_handler = logging.FileHandler('logfile.log')
+    #file_handler = logging.FileHandler('logfile.log')
+    file_handler = logging.FileHandler('logfile'+ str(datetime.datetime.now())+ '.log')
     formatter    = logging.Formatter('%(asctime)s : %(levelname)s : %(name)s : %(message)s')
     file_handler.setFormatter(formatter)
 
