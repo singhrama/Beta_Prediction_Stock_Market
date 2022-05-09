@@ -1,5 +1,12 @@
+# -*- coding: utf-8 -*-
+#!/usr/bin/env python
+
+
 import sys
+
+'''
 sys.path.insert(0,"/geode2/home/u080/singrama/Carbonate/.local/lib/python3.6/site-packages")
+'''
 
 import pandas as pd
 import numpy as np
@@ -28,54 +35,12 @@ def get_cusip():
 		
 	return o_my_cusips
 	
-
-def start_cusip():
-	inti_file= "/N/u/singrama/Carbonate/Documents/Beta_Conditional/Input_Files" #"D:\IUB\Course_Work\RA\Stock_Beta_Estimation\code"
-	os.chdir(inti_file)
-
-	with open(inti_file + '/Years_Extract.txt') as f:
-		lines = f.readlines()
-		oyears = lines[0].split(",")
-
-	ologger = setup_logging()
-	o_my_cusips = get_cusip()
-	
-	user = 'cdavis40'
-	password = 'TH!7rRS8BNf9z@P'
-
-	conn = wrds.Connection(wrds_username = user)
-	#for tick in tickers.ticker:
-	for cusip in o_my_cusips:
-
-		#print(tick)
-		os.chdir(inti_file)
-		for year in oyears:
-			try:
-				ologger.info(cusip + '_Started_For_' + year)
-				cond_bea(conn, inti_file, cusip, year.strip(), ologger)
-			except:
-				ologger.critical(cusip + '_For_' + year + '_FAILED')
 		
-		path = inti_file + '/' + cusip
-		
-		if os.path.isdir(path) ==True:
-			all_filenames = [i for i in glob.glob(os.path.join(path, "*.csv"))]
-		#combine all files in the list
-			combined_csv = pd.concat([pd.read_csv(f) for f in all_filenames ])
-		#export to csv
-			pcklepath = '/N/slate/singrama/Final_Pickle_Files/combined_pickle_' + cusip + '.p'
-
-			pickle.dump( combined_csv, open( pcklepath, "wb" ) )
-					
-			if os.path.isdir(path) ==True: shutil.rmtree(path, ignore_errors=True)
-			ologger.info(cusip + '_File_Done_For_' + year)
-			
-			
 				
 				
 def setup_logging():
 
-    # Gets or creates a logger
+    ###Gets or creates a logger
     logger = logging.getLogger(__name__)  
     
     # set log level
@@ -83,7 +48,7 @@ def setup_logging():
 
     # define file handler and set formatter
     #file_handler = logging.FileHandler('logfile.log')
-    file_handler = logging.FileHandler('logfile'+ str(datetime.datetime.now())+ '.log')
+    file_handler = logging.FileHandler('logfile'+ str(datetime.datetime.now()).replace(":","_") + '.log')
     formatter    = logging.Formatter('%(asctime)s : %(levelname)s : %(name)s : %(message)s')
     file_handler.setFormatter(formatter)
 
@@ -191,7 +156,7 @@ def cond_bea(conn, inti_file,cus,oyr,ologger):
                         dataframe_new.loc[len(dataframe_new.index)]=[dated,time_to_maturity_yrs,med_value]  #adding the record to our new dataframe
 
                 else:
-                    ologger.warning(cusip + '_Incomplete_Data_SVIX_Check_For_' + year)
+                    ologger.warning(cusip_id + '_Incomplete_Data_SVIX_Check_For_' + oyr)
  
                 dataframe_new['P/S']=dataframe_new['P/S']*(-1)
                 dataframe_new['date']=pd.to_datetime(dataframe_new['date'],format="%Y%m%d")
@@ -324,7 +289,57 @@ def cond_bea(conn, inti_file,cus,oyr,ologger):
             if os.path.isdir(outdir) ==True: shutil.rmtree(outdir, ignore_errors=True)
 
         else:
-            ologger.warning(cusip + '_Implied_Volatility_Is_Null_' + year)
+            ologger.warning(cusip_id + '_Implied_Volatility_Is_Null_' + oyr)
     
     else:
-        ologger.warning(cusip + '_No_Data_For_' + year)
+        ologger.warning(cusip_id + '_No_Data_For_' + oyr)
+
+
+
+def start_cusip():
+	inti_file= "/N/u/singrama/Carbonate/Documents/Beta_Conditional/Input_Files" #"D:\IUB\Course_Work\RA\Stock_Beta_Estimation\code"
+	os.chdir(inti_file)
+
+	with open(inti_file + '/Years_Extract.txt') as f:
+		lines = f.readlines()
+		oyears = lines[0].split(",")
+
+	ologger = setup_logging()
+	o_my_cusips = get_cusip()
+	
+	user = 'cdavis40'
+	password = 'TH!7rRS8BNf9z@P'
+
+	conn = wrds.Connection(wrds_username = user)
+	#for tick in tickers.ticker:
+	for cusip in o_my_cusips:
+
+		#print(tick)
+		os.chdir(inti_file)
+		for year in oyears:
+			try:
+				ologger.info(cusip + '_Started_For_' + year)
+				cond_bea(conn, inti_file, cusip, year.strip(), ologger)
+			except:
+				ologger.critical(cusip + '_For_' + year + '_FAILED')
+		
+		path = inti_file + '/' + cusip
+		
+		if os.path.isdir(path) ==True:
+			all_filenames = [i for i in glob.glob(os.path.join(path, "*.csv"))]
+		###combine all files in the list
+			combined_csv = pd.concat([pd.read_csv(f) for f in all_filenames ])
+		###export to csv
+			pcklepath = '/N/slate/singrama/Final_Pickle_Files/combined_pickle_' + cusip + '.p'
+
+			pickle.dump( combined_csv, open( pcklepath, "wb" ) )
+					
+			if os.path.isdir(path) ==True: shutil.rmtree(path, ignore_errors=True)
+			ologger.info(cusip + '_File_Done_For_' + year)
+			
+def main():
+	start_cusip()
+	
+if __name__=="__main__":
+	#sys.path.insert(0,"/geode2/home/u080/singrama/Carbonate/.local/lib/python3.6/site-packages")
+	main()	
