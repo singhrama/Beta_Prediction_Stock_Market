@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 
 import sys
@@ -13,6 +13,7 @@ import numpy as np
 import os
 import wrds
 import pickle
+import json
 from sklearn.linear_model import LinearRegression
 import option_util as util
 import datetime
@@ -26,17 +27,15 @@ import logging
 warnings.filterwarnings('ignore')
 
 
-def get_cusip():
+def get_cusip(inti_file):
 	o_my_cusips=[]
-	ocusips_vals = pd.read_csv('/N/u/singrama/Carbonate/Documents/Beta_Conditional/Input_Files/Combined_CSV_CUSIP.csv')
+	opath = inti_file + '/Combined_CSV_CUSIP.csv'
+	ocusips_vals = pd.read_csv(opath)
 
 	for i in range(6640, 13249):
 		o_my_cusips.append(ocusips_vals['CUSIP'].iloc[i])
 		
-	return o_my_cusips
-	
-		
-				
+	return o_my_cusips			
 				
 def setup_logging():
 
@@ -196,7 +195,6 @@ def cond_bea(conn, inti_file,cus,oyr,ologger):
 
             ### finish
             bar.finish()
-            #outdir='/Users/nikunjbhatia/Desktop/Conditional Betas/chunks/'
 
             ### read in chunks 
             files = sorted(os.listdir(outdir))
@@ -284,8 +282,10 @@ def cond_bea(conn, inti_file,cus,oyr,ologger):
 
             df_final.drop(['cp_flag_x','cp_flag_y'], axis = 1, inplace=True)
             out_files = os.path.join(inti_file, cus)
+  
             if os.path.isdir(out_files) ==False:  os.mkdir(out_files)
-            df_final.to_csv(out_files + '//' +'Final_File_' + cus + '_'+ oyr + '.csv', index= False) 
+            df_final.to_csv(out_files + '//' +'Final_File_' + cus + '_'+ oyr + '.csv', index= False)
+            ologger.info(cus + '_Completed_For_' + oyr)
             if os.path.isdir(outdir) ==True: shutil.rmtree(outdir, ignore_errors=True)
 
         else:
@@ -294,48 +294,100 @@ def cond_bea(conn, inti_file,cus,oyr,ologger):
     else:
         ologger.warning(cusip_id + '_No_Data_For_' + oyr)
 
-
+def check_cusip_exist(inti_path,ocusip,ologger):
+    otrack = inti_path + '/' + "CUSIP_TRACKER.json"
+    if os.path.exists(otrack):
+        with open(otrack, 'r') as jf:
+#             print(otrack)
+            data = json.load(jf)
+            
+        if not (data.get(ocusip)):
+            return True    # If new cusip 
+        else:
+            ologger.info(ocusip + '_Already_Downloaded')
+            return False   # If cusip already downloaded
+    else:
+        return True  # If new cusip
+        
+def add_cusip_exist(inti_path,ocusip,ologger):
+    otrack = inti_path + '/' + "CUSIP_TRACKER.json"
+    if os.path.exists(otrack):
+        with open(otrack, 'r') as jf:
+#             print(otrack)
+            data = json.load(jf)
+            
+        if not (data.get(ocusip)):
+            data.update({ocusip:ocusip})
+            with open(otrack, 'w') as jf:
+                json.dump(data, jf)
+                jf.close()
+#             return True    # If new cusip 
+#         else:
+#             ologger.info(ocusip + '_Already_Downloaded')
+#             return False   # If cusip already downloaded
+    else:
+        with open(otrack, 'w') as jf:
+                json.dump({ocusip:ocusip}, jf)
+                jf.close()
+#         return True  # If new cusip
 
 def start_cusip():
 	inti_file= "/N/u/singrama/Carbonate/Documents/Beta_Conditional/Input_Files" #"D:\IUB\Course_Work\RA\Stock_Beta_Estimation\code"
 	os.chdir(inti_file)
+
+	o_my_cusips=[]
+	ocsv_path = inti_file + '/Combined_CSV_CUSIP.csv'
+	ocusips_vals = pd.read_csv(ocsv_path) #'/N/u/singrama/Carbonate/Documents/Beta_Conditional/Input_Files/Combined_CSV_CUSIP.csv')
+
+	for i in range(len(ocusips_vals)):
+		o_my_cusips.append(ocusips_vals['CUSIP'].iloc[i])
 
 	with open(inti_file + '/Years_Extract.txt') as f:
 		lines = f.readlines()
 		oyears = lines[0].split(",")
 
 	ologger = setup_logging()
-	o_my_cusips = get_cusip()
-	
+
 	user = 'cdavis40'
 	password = 'TH!7rRS8BNf9z@P'
 
 	conn = wrds.Connection(wrds_username = user)
+
 	#for tick in tickers.ticker:
 	for cusip in o_my_cusips:
-
 		#print(tick)
 		os.chdir(inti_file)
-		for year in oyears:
-			try:
-				ologger.info(cusip + '_Started_For_' + year)
-				cond_bea(conn, inti_file, cusip, year.strip(), ologger)
-			except:
-				ologger.critical(cusip + '_For_' + year + '_FAILED')
-		
-		path = inti_file + '/' + cusip
-		
-		if os.path.isdir(path) ==True:
-			all_filenames = [i for i in glob.glob(os.path.join(path, "*.csv"))]
-		###combine all files in the list
-			combined_csv = pd.concat([pd.read_csv(f) for f in all_filenames ])
-		###export to csv
-			pcklepath = '/N/slate/singrama/Final_Pickle_Files/combined_pickle_' + cusip + '.p'
+		if check_cusip_exist(inti_file,cusip,ologger):
+			
+			for year in oyears:
+				try:
+					ologger.info(cusip + '_Started_For_' + year)
+					cond_bea(conn, inti_file, cusip, year.strip(), ologger)
+					ologger.info(cusip + '_File_Executed_For_' + year)
 
-			pickle.dump( combined_csv, open( pcklepath, "wb" ) )
+				except:
+					ologger.critical(cusip + '_For_' + year + '_FAILED')
+
+		#         cond_bea(inti_file, 'MXIM', year.strip())
+				#cond_bea(inti_file, tick, year)
+				
+			add_cusip_exist(inti_file,cusip,ologger)
+			path = inti_file + '/' + cusip
+
+			if os.path.isdir(path) ==True:
+				all_filenames = [i for i in glob.glob(os.path.join(path, "*.csv"))]
+			#combine all files in the list
+				combined_csv = pd.concat([pd.read_csv(f) for f in all_filenames ])
+				
+				pcklepath = '/N/slate/singrama/Final_Pickle_Files'
+				if os.path.isdir(pcklepath)==False: os.mkdir(pcklepath)
 					
-			if os.path.isdir(path) ==True: shutil.rmtree(path, ignore_errors=True)
-			ologger.info(cusip + '_File_Done_For_' + year)
+			#export to csv
+				pcklepath = pcklepath+ '/combined_pickle_' + cusip + '.p'
+				pickle.dump( combined_csv, open( pcklepath, "wb" ) )
+
+				if os.path.isdir(path) ==True: shutil.rmtree(path, ignore_errors=True)
+				ologger.info(cusip + '_File_Done_With_Pickle_File')
 			
 def main():
 	start_cusip()
