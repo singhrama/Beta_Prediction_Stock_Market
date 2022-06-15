@@ -10,6 +10,7 @@ sys.path.insert(0,"/geode2/home/u080/singrama/Carbonate/.local/lib/python3.6/sit
 
 import pandas as pd
 import numpy as np
+from glob import glob
 import os
 import wrds
 import pickle
@@ -25,19 +26,8 @@ import math
 import warnings
 import logging
 warnings.filterwarnings('ignore')
-
-
-def get_cusip(inti_file):
-	o_my_cusips=[]
-	opath = inti_file + '/Combined_CSV_CUSIP.csv'
-	ocusips_vals = pd.read_csv(opath)
-
-	for i in range(6640, 13249):
-		o_my_cusips.append(ocusips_vals['CUSIP'].iloc[i])
-		
-	return o_my_cusips			
-				
-def setup_logging():
+    
+def setup_logging(inti_file):
 
     ###Gets or creates a logger
     logger = logging.getLogger(__name__)  
@@ -47,7 +37,11 @@ def setup_logging():
 
     # define file handler and set formatter
     #file_handler = logging.FileHandler('logfile.log')
-    file_handler = logging.FileHandler('logfile'+ str(datetime.datetime.now()).replace(":","_") + '.log')
+    out_files = os.path.join(inti_file, 'log')
+    if os.path.isdir(out_files) ==False:  os.mkdir(out_files)
+    logfilepath = out_files + '/'+ 'logfile_'+ str(datetime.datetime.now()).replace(":","_") + '.log'
+        
+    file_handler = logging.FileHandler(logfilepath)
     formatter    = logging.Formatter('%(asctime)s : %(levelname)s : %(name)s : %(message)s')
     file_handler.setFormatter(formatter)
 
@@ -56,25 +50,34 @@ def setup_logging():
     
     return logger
     
-def cond_bea(conn, inti_file,cus,oyr,ologger):
+def cond_bea(onew_sec_cusip, inti_file,cus,oyr,ologger,vsurf_path,secprd_path):
 
     ### get all optionm (option metrics) tables
-    tables = conn.list_tables(library = 'optionm')
-    tables = sorted(tables)
+#     tables = conn.list_tables(library = 'optionm')
+#     tables = sorted(tables)
 
-    ### read in security info
-    secinfo = conn.get_table(library = 'optionm', table = 'securd')
-    secinfo = secinfo.loc[secinfo.cusip == str(cus), :]
+#     ### read in security info
+#     secinfo = conn.get_table(library = 'optionm', table = 'securd')
+#     secinfo = secinfo.loc[secinfo.cusip == str(cus), :]
 
-#     print(secinfo)
-    secid = int(secinfo.secid.values[0])
+# #     print(secinfo)
+#     secid = int(secinfo.secid.values[0])
     
-    cusip_id = secinfo['cusip'].squeeze() 
-
+    secid = onew_sec_cusip.get(cus)
+    cusip_id = cus
+    print(cus, secid)
+    files = glob.glob(vsurf_path + '/'+  oyr + '*')
+    
+    data = pd.DataFrame()
+    for i in files:
+        with open(i, 'rb') as vsuf_pkl:
+            odata = pickle.load(vsuf_pkl)
+            data  = pd.concat([data, odata[odata.secid.isin([secid])]])
+        
     ### read in SPDR data
-    data = conn.raw_sql("""select * 
-                    from optionm.vsurfd""" + str(oyr)+
-                    """ where secid = """ + str(secid))
+#     data = conn.raw_sql("""select * 
+#                     from optionm.vsurfd""" + str(oyr)+
+#                     """ where secid = """ + str(secid))
     
     if not(data.empty): 
 #     data = conn.raw_sql("""select * 
@@ -82,14 +85,21 @@ def cond_bea(conn, inti_file,cus,oyr,ologger):
 #                         where secid = """ + str(secid))
 #     print(data)
     ### merge to security info
-        data = data.merge(secinfo, on = 'secid')
+    
+#         data = data.merge(secinfo, on = 'secid')
 
         ### get prices
         #secprc = conn.get_table(library = 'optionm', table = 'secprd2014')
+        
+        files = glob.glob(secprd_path + '/'+  oyr + '*')
 
-        secprc = conn.raw_sql("""select secid, date, close
-                              from optionm.secprd""" + str(oyr)+
-                              """ where secid = """ + str(secid))
+        with open(i, 'rb') as secprd_pkl:
+            secprc = pickle.load(secprd_pkl)
+            secprc  = secprc[secprc.secid.isin(['secid'])]
+        
+#         secprc = conn.raw_sql("""select secid, date, close
+#                               from optionm.secprd""" + str(oyr)+
+#                               """ where secid = """ + str(secid))
 
         #secprc = conn.raw_sql("""select secid, date, close
                               #from optionm.secprd2014
@@ -168,7 +178,7 @@ def cond_bea(conn, inti_file,cus,oyr,ologger):
                     dataframe_nn_2.loc[len(dataframe_nn_2)]=[d,m,b]  #adding the record to our new dataframe
                 #print(dataframe_nn_2)
 
-            dir_pickle = "pickel_files"
+            dir_pickle = "pickel_files_" + cusip_id 
             outdir = os.path.join(inti_file, dir_pickle)
             if os.path.isdir(outdir) ==False:  os.mkdir(outdir)
 
@@ -332,40 +342,37 @@ def add_cusip_exist(inti_path,ocusip,ologger):
 #         return True  # If new cusip
 
 def start_cusip():
-	inti_file= "/N/u/singrama/Carbonate/Documents/Beta_Conditional/Input_Files" #"D:\IUB\Course_Work\RA\Stock_Beta_Estimation\code"
+	inti_file= "/N/slate/singrama/Input_Files" #"D:\IUB\Course_Work\RA\Stock_Beta_Estimation\code"
+	vsurf_path = '/N/project/conditional_betas/data/yearly_data/vsurfd/Final_Bz2_Files'
+	secprd_path = '/N/project/conditional_betas/data/yearly_data/secprd/Final_Bz2_Files'
+    
 	os.chdir(inti_file)
-
-	o_my_cusips=[]
-	ocsv_path = inti_file + '/Combined_CSV_CUSIP.csv'
-	ocusips_vals = pd.read_csv(ocsv_path) #'/N/u/singrama/Carbonate/Documents/Beta_Conditional/Input_Files/Combined_CSV_CUSIP.csv')
-
-	for i in range(len(ocusips_vals)):
-		o_my_cusips.append(ocusips_vals['CUSIP'].iloc[i])
-
+    
+	opath = inti_file + '/vsurfpd_cusip_data.csv'
+	ocusips_vals_sec = pd.read_csv(opath)
+    
+	onew_sec_cusip = dict(zip(ocusips_vals_sec.cusip, ocusips_vals_sec.secid))
+    
 	with open(inti_file + '/Years_Extract.txt') as f:
 		lines = f.readlines()
 		oyears = lines[0].split(",")
 
-	ologger = setup_logging()
-
-	user = 'cdavis40'
-	password = 'TH!7rRS8BNf9z@P'
-
-	conn = wrds.Connection(wrds_username = user)
+	ologger = setup_logging(inti_file)
 
 	#for tick in tickers.ticker:
-	for cusip in o_my_cusips:
+	for cusip in onew_sec_cusip:
 		#print(tick)
 		os.chdir(inti_file)
 		if check_cusip_exist(inti_file,cusip,ologger):
 			
 			for year in oyears:
-				try:
+# 				try:
 					ologger.info(cusip + '_Started_For_' + year)
-					cond_bea(conn, inti_file, cusip, year.strip(), ologger)
+                    
+					cond_bea(onew_sec_cusip, inti_file, cusip, year.strip(), ologger, vsurf_path,secprd_path)
 					ologger.info(cusip + '_File_Executed_For_' + year)
 
-				except:
+# 				except:
 					ologger.critical(cusip + '_For_' + year + '_FAILED')
 
 		#         cond_bea(inti_file, 'MXIM', year.strip())
